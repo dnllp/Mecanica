@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRUA · Aceleración con tres sensores</title>
+<style>
+  :root{
+    --bg: #0d1420;
+    --panel: #131d2b;
+    --panel-line: #223349;
+    --rail: #2a3c52;
+    --teal: #57d9c4;
+    --teal-dim: #2a5f57;
+    --amber: #f2a65a;
+    --violet: #b58ef2;
+    --text: #e7edf3;
+    --muted: #7c8ea3;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16233584, transparent 45%), var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 40px 20px 60px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .page{ width: 100%; max-width: 960px; }
+
+  header{ margin-bottom: 28px; }
+
+  .eyebrow{ color: var(--amber); font-size: 13px; letter-spacing: 0.02em; margin: 0 0 6px; }
+
+  h1{ font-size: clamp(24px, 4vw, 34px); margin: 0 0 10px; font-weight: 650; letter-spacing: -0.01em; }
+
+  p.lead{ color: var(--muted); max-width: 64ch; line-height: 1.55; margin: 0; font-size: 15px; }
+
+  .stage{
+    margin-top: 32px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 28px 24px 24px;
+  }
+
+  svg{ width: 100%; height: auto; display: block; }
+
+  .ground{ fill: #0e1826; stroke: var(--panel-line); stroke-width: 1; }
+  .ramp{ stroke: var(--rail); stroke-width: 4; stroke-linecap: round; }
+  .ramp-fill{ fill: #101c2c; opacity: 0.6; }
+
+  .sensor-post{ stroke: var(--rail); stroke-width: 3; }
+  .sensor-head{ fill: #1b2838; stroke: var(--rail); stroke-width: 2; }
+  .sensor-head.active{ fill: var(--teal-dim); stroke: var(--teal); }
+
+  .beam{ stroke: var(--teal); stroke-width: 2; stroke-dasharray: 3 4; opacity: 0; }
+  .beam.on{ opacity: 0.85; }
+
+  .sensor-label{ fill: var(--muted); font-family: var(--mono); font-size: 11.5px; }
+  .distance-label{ fill: var(--amber); font-family: var(--mono); font-size: 12px; }
+
+  .cart-body{ fill: var(--amber); }
+  .cart-glow{ fill: var(--amber); opacity: 0.18; }
+
+  .flash{ fill: var(--teal); opacity: 0; }
+
+  .readout{
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .stat{
+    background: #0e1826;
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+
+  .stat .label{ display: block; color: var(--muted); font-size: 11.5px; margin-bottom: 6px; }
+  .stat .value{ font-family: var(--mono); font-size: 18px; letter-spacing: -0.01em; }
+  .stat.result .value{ color: var(--teal); }
+  .stat.compare .value{ color: var(--violet); }
+
+  .controls{
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    padding-top: 20px;
+    border-top: 1px solid var(--panel-line);
+  }
+
+  .slider-group{ display: flex; align-items: center; gap: 12px; flex: 1; min-width: 240px; }
+  .slider-group label{ font-size: 13px; color: var(--muted); white-space: nowrap; }
+  input[type="range"]{ flex: 1; accent-color: var(--amber); }
+  .speed-value{ font-family: var(--mono); font-size: 13px; color: var(--amber); min-width: 70px; }
+
+  button{
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  button:active{ transform: scale(0.97); }
+  #playBtn{ background: var(--amber); color: #0d1420; }
+  #playBtn:disabled{ opacity: 0.5; cursor: not-allowed; }
+  #resetBtn{ background: transparent; border-color: var(--panel-line); color: var(--text); }
+
+  .graphs{
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .graph-block h2{ font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 10px; }
+
+  canvas{
+    width: 100%;
+    height: 150px;
+    background: #0e1826;
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+  }
+
+  .note{
+    margin-top: 16px;
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  footer{ margin-top: 20px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+
+  @media (max-width: 720px){
+    .readout{ grid-template-columns: repeat(2, 1fr); }
+    .graphs{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <p class="eyebrow">Física · MRUA con Arduino</p>
+    <h1>Medición de aceleración con tres sensores</h1>
+    <p class="lead">
+      El carrito se suelta desde el punto alto de un riel inclinado y acelera de forma constante.
+      Los sensores 1 y 2 dan una velocidad media v₁; los sensores 2 y 3 dan v₂. Con esas dos
+      velocidades y sus tiempos medios se calcula a = (v₂ − v₁) / (t₂ − t₁), igual que en el Arduino.
+    </p>
+  </header>
+
+  <div class="stage">
+    <svg viewBox="0 0 900 320" preserveAspectRatio="xMidYMid meet">
+      <!-- ground -->
+      <polygon class="ground" points="70,300 830,300 830,270 90,270"></polygon>
+
+      <!-- ramp wedge fill -->
+      <polygon class="ramp-fill" points="90,60 90,270 830,270"></polygon>
+
+      <!-- ramp surface -->
+      <line id="rampLine" class="ramp" x1="90" y1="60" x2="830" y2="270"></line>
+
+      <!-- angle arc label -->
+      <text class="sensor-label" x="130" y="255">θ</text>
+
+      <!-- sensors: positions computed in JS via updateSensorPositions(), placeholders here -->
+      <g id="sensor1"></g>
+      <g id="sensor2"></g>
+      <g id="sensor3"></g>
+
+      <!-- distance labels -->
+      <text id="label12" class="distance-label" text-anchor="middle">d₁₂ = 0.30 m</text>
+      <text id="label23" class="distance-label" text-anchor="middle">d₂₃ = 0.30 m</text>
+
+      <!-- start marker -->
+      <text id="labelStart" class="sensor-label" text-anchor="middle">suelta aquí</text>
+
+      <!-- cart -->
+      <g id="cart">
+        <circle class="cart-glow" r="15"></circle>
+        <circle class="cart-body" r="8"></circle>
+      </g>
+
+      <!-- flashes -->
+      <circle id="flash1" class="flash" r="17"></circle>
+      <circle id="flash2" class="flash" r="17"></circle>
+      <circle id="flash3" class="flash" r="17"></circle>
+    </svg>
+
+    <div class="readout">
+      <div class="stat">
+        <span class="label">t₁ / t₂ / t₃</span>
+        <span class="value" id="timesVal">— / — / —</span>
+      </div>
+      <div class="stat">
+        <span class="label">v₁ (tramo 1)</span>
+        <span class="value" id="v1val">—</span>
+      </div>
+      <div class="stat">
+        <span class="label">v₂ (tramo 2)</span>
+        <span class="value" id="v2val">—</span>
+      </div>
+      <div class="stat result">
+        <span class="label">a calculada</span>
+        <span class="value" id="aval">—</span>
+      </div>
+      <div class="stat compare">
+        <span class="label">a configurada</span>
+        <span class="value" id="aconfig">0.5 m/s²</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label for="accel">Aceleración simulada</label>
+        <input type="range" id="accel" min="0.2" max="1.2" step="0.1" value="0.5">
+        <span class="speed-value" id="accelLabel">0.5 m/s²</span>
+      </div>
+      <button id="playBtn">Soltar objeto</button>
+      <button id="resetBtn">Reiniciar</button>
+    </div>
+
+    <p class="note">
+      La aceleración aquí es un valor de demostración para que la animación sea legible.
+      En el riel físico, la aceleración real depende del ángulo (a ≈ g·senθ) y de la fricción,
+      tal como se describe en la guía impresa.
+    </p>
+
+    <div class="graphs">
+      <div class="graph-block">
+        <h2>Posición vs. tiempo (parábola)</h2>
+        <canvas id="graphX" width="440" height="150"></canvas>
+      </div>
+      <div class="graph-block">
+        <h2>Velocidad vs. tiempo (recta)</h2>
+        <canvas id="graphV" width="440" height="150"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Animación de apoyo para la guía "Medición de aceleración en MRUA con Arduino y tres sensores".
+    Los puntos violeta en la gráfica v-t marcan v₁ y v₂ calculadas por los sensores; caen exactamente
+    sobre la recta porque la velocidad media de un tramo con aceleración constante coincide con la
+    velocidad instantánea en el instante medio de ese tramo — vale la pena discutirlo en clase.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const rampLine = document.getElementById('rampLine');
+  const rampStart = { x: parseFloat(rampLine.getAttribute('x1')), y: parseFloat(rampLine.getAttribute('y1')) };
+  const rampEnd   = { x: parseFloat(rampLine.getAttribute('x2')), y: parseFloat(rampLine.getAttribute('y2')) };
+
+  // physical positions along the ramp (meters from release point)
+  const S_START = 0.0;
+  const S1 = 0.20;
+  const D12 = 0.30;
+  const D23 = 0.30;
+  const S2 = S1 + D12;
+  const S3 = S2 + D23;
+  const S_VISUAL_TOTAL = S3 + 0.15; // small margin past sensor 3
+
+  function pointAt(s){
+    const u = s / S_VISUAL_TOTAL;
+    return {
+      x: rampStart.x + u * (rampEnd.x - rampStart.x),
+      y: rampStart.y + u * (rampEnd.y - rampStart.y)
+    };
+  }
+
+  function normalAngleDeg(){
+    const dx = rampEnd.x - rampStart.x, dy = rampEnd.y - rampStart.y;
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+
+  function buildSensor(id, s, label){
+    const g = document.getElementById(id);
+    const p = pointAt(s);
+    const angle = normalAngleDeg();
+    g.setAttribute('transform', `translate(${p.x},${p.y}) rotate(${angle})`);
+    g.innerHTML = `
+      <line class="sensor-post" x1="0" y1="0" x2="0" y2="-50"></line>
+      <rect class="sensor-head" x="-16" y="-68" width="32" height="18" rx="4"></rect>
+      <line class="beam" x1="0" y1="-58" x2="0" y2="0"></line>
+      <text class="sensor-label" x="0" y="-78" text-anchor="middle" transform="rotate(${-angle})" style="transform-box:fill-box;">${label}</text>
+    `;
+  }
+
+  buildSensor('sensor1', S1, 'SENSOR 1');
+  buildSensor('sensor2', S2, 'SENSOR 2');
+  buildSensor('sensor3', S3, 'SENSOR 3');
+
+  // distance labels, placed above the midpoints of each segment
+  function placeLabel(id, sFrom, sTo){
+    const mid = pointAt((sFrom + sTo) / 2);
+    const el = document.getElementById(id);
+    el.setAttribute('x', mid.x);
+    el.setAttribute('y', mid.y - 14);
+  }
+  placeLabel('label12', S1, S2);
+  placeLabel('label23', S2, S3);
+
+  const startPt = pointAt(S_START);
+  const labelStart = document.getElementById('labelStart');
+  labelStart.setAttribute('x', startPt.x);
+  labelStart.setAttribute('y', startPt.y - 14);
+
+  // position flashes at sensor coordinates
+  ['flash1','flash2','flash3'].forEach((id, i) => {
+    const s = [S1, S2, S3][i];
+    const p = pointAt(s);
+    const el = document.getElementById(id);
+    el.setAttribute('cx', p.x);
+    el.setAttribute('cy', p.y);
+  });
+
+  const cart = document.getElementById('cart');
+  const beam1 = document.querySelector('#sensor1 .beam');
+  const beam2 = document.querySelector('#sensor2 .beam');
+  const beam3 = document.querySelector('#sensor3 .beam');
+  const head1 = document.querySelector('#sensor1 .sensor-head');
+  const head2 = document.querySelector('#sensor2 .sensor-head');
+  const head3 = document.querySelector('#sensor3 .sensor-head');
+  const flash1 = document.getElementById('flash1');
+  const flash2 = document.getElementById('flash2');
+  const flash3 = document.getElementById('flash3');
+
+  const timesVal = document.getElementById('timesVal');
+  const v1val = document.getElementById('v1val');
+  const v2val = document.getElementById('v2val');
+  const aval = document.getElementById('aval');
+  const aconfig = document.getElementById('aconfig');
+
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const accelSlider = document.getElementById('accel');
+  const accelLabel = document.getElementById('accelLabel');
+
+  const graphX = document.getElementById('graphX').getContext('2d');
+  const graphV = document.getElementById('graphV').getContext('2d');
+  const graphXcanvas = document.getElementById('graphX');
+  const graphVcanvas = document.getElementById('graphV');
+
+  let animId = null;
+  let running = false;
+  let startTime = null;
+  let crossed1 = false, crossed2 = false, crossed3 = false;
+  let t1 = null, t2 = null, t3 = null;
+  const xPoints = [];
+
+  function updateAccelLabels(){
+    const a = parseFloat(accelSlider.value).toFixed(1);
+    accelLabel.textContent = a + ' m/s²';
+    aconfig.textContent = a + ' m/s²';
+  }
+  accelSlider.addEventListener('input', updateAccelLabels);
+  updateAccelLabels();
+
+  function resetVisuals(){
+    const p = pointAt(S_START);
+    cart.setAttribute('transform', `translate(${p.x},${p.y})`);
+    [flash1,flash2,flash3].forEach(f => f.style.opacity = 0);
+    [beam1,beam2,beam3].forEach(b => b.classList.remove('on'));
+    [head1,head2,head3].forEach(h => h.classList.remove('active'));
+    timesVal.textContent = '— / — / —';
+    v1val.textContent = '—';
+    v2val.textContent = '—';
+    aval.textContent = '—';
+    xPoints.length = 0;
+    drawGraphs(null, null);
+  }
+
+  function fmt3(v){ return v.toFixed(3); }
+
+  function drawGraphs(v1, v2, tm1, tm2){
+    // X-t graph
+    const wx = graphXcanvas.width, hx = graphXcanvas.height;
+    graphX.clearRect(0,0,wx,hx);
+    graphX.strokeStyle = '#223349'; graphX.lineWidth = 1;
+    graphX.beginPath();
+    graphX.moveTo(36,10); graphX.lineTo(36,hx-28); graphX.lineTo(wx-8,hx-28);
+    graphX.stroke();
+    graphX.fillStyle = '#7c8ea3'; graphX.font = '10.5px monospace';
+    graphX.fillText('x (m)', 4, 18);
+    graphX.fillText('t (s)', wx-30, hx-8);
+
+    if(xPoints.length > 1){
+      const maxT = Math.max(0.5, xPoints[xPoints.length-1].t * 1.05);
+      const maxX = S_VISUAL_TOTAL * 1.05;
+      graphX.strokeStyle = '#f2a65a'; graphX.lineWidth = 2;
+      graphX.beginPath();
+      xPoints.forEach((p,i) => {
+        const px = 36 + (p.t/maxT) * (wx-50);
+        const py = (hx-28) - (p.x/maxX) * (hx-42);
+        if(i===0) graphX.moveTo(px,py); else graphX.lineTo(px,py);
+      });
+      graphX.stroke();
+    }
+
+    // V-t graph
+    const wv = graphVcanvas.width, hv = graphVcanvas.height;
+    graphV.clearRect(0,0,wv,hv);
+    graphV.strokeStyle = '#223349'; graphV.lineWidth = 1;
+    graphV.beginPath();
+    graphV.moveTo(36,10); graphV.lineTo(36,hv-28); graphV.lineTo(wv-8,hv-28);
+    graphV.stroke();
+    graphV.fillStyle = '#7c8ea3'; graphV.font = '10.5px monospace';
+    graphV.fillText('v (m/s)', 4, 18);
+    graphV.fillText('t (s)', wv-30, hv-8);
+
+    if(xPoints.length > 1){
+      const a = parseFloat(accelSlider.value);
+      const maxT = Math.max(0.5, xPoints[xPoints.length-1].t * 1.05);
+      const maxV = a * maxT * 1.1;
+
+      graphV.strokeStyle = '#57d9c4'; graphV.lineWidth = 2;
+      graphV.beginPath();
+      graphV.moveTo(36, hv-28);
+      const px = 36 + (maxT/maxT) * (wv-50);
+      const py = (hv-28) - ((a*maxT)/maxV) * (hv-42);
+      graphV.lineTo(px, py);
+      graphV.stroke();
+
+      if(v1 !== undefined && v1 !== null && tm1 !== undefined){
+        const p1x = 36 + (tm1/maxT) * (wv-50);
+        const p1y = (hv-28) - (v1/maxV) * (hv-42);
+        graphV.fillStyle = '#b58ef2';
+        graphV.beginPath(); graphV.arc(p1x,p1y,4,0,Math.PI*2); graphV.fill();
+      }
+      if(v2 !== undefined && v2 !== null && tm2 !== undefined){
+        const p2x = 36 + (tm2/maxT) * (wv-50);
+        const p2y = (hv-28) - (v2/maxV) * (hv-42);
+        graphV.fillStyle = '#b58ef2';
+        graphV.beginPath(); graphV.arc(p2x,p2y,4,0,Math.PI*2); graphV.fill();
+      }
+    }
+  }
+
+  function triggerFlash(flashEl, beamEl, headEl){
+    beamEl.classList.add('on');
+    headEl.classList.add('active');
+    flashEl.style.transition = 'none';
+    flashEl.style.opacity = 0.9;
+    void flashEl.offsetWidth;
+    flashEl.style.transition = 'opacity 0.6s ease';
+    flashEl.style.opacity = 0;
+  }
+
+  function step(timestamp){
+    if(startTime === null) startTime = timestamp;
+    const elapsed = (timestamp - startTime) / 1000;
+    const a = parseFloat(accelSlider.value);
+    const s = 0.5 * a * elapsed * elapsed;
+
+    const p = pointAt(Math.min(s, S_VISUAL_TOTAL));
+    cart.setAttribute('transform', `translate(${p.x},${p.y})`);
+
+    xPoints.push({ t: elapsed, x: Math.min(s, S_VISUAL_TOTAL) });
+
+    if(!crossed1 && s >= S1){ crossed1 = true; t1 = elapsed; triggerFlash(flash1,beam1,head1); }
+    if(!crossed2 && s >= S2){ crossed2 = true; t2 = elapsed; triggerFlash(flash2,beam2,head2); }
+    if(!crossed3 && s >= S3){
+      crossed3 = true; t3 = elapsed; triggerFlash(flash3,beam3,head3);
+
+      const t12 = t2 - t1, t23 = t3 - t2;
+      const v1 = D12 / t12;
+      const v2 = D23 / t23;
+      const tm1 = t1 + t12/2;
+      const tm2 = t2 + t23/2;
+      const aCalc = (v2 - v1) / (tm2 - tm1);
+
+      timesVal.textContent = `${fmt3(t1)} / ${fmt3(t2)} / ${fmt3(t3)} s`;
+      v1val.textContent = fmt3(v1) + ' m/s';
+      v2val.textContent = fmt3(v2) + ' m/s';
+      aval.textContent = fmt3(aCalc) + ' m/s²';
+
+      drawGraphs(v1, v2, tm1, tm2);
+    } else {
+      drawGraphs();
+    }
+
+    if(s < S_VISUAL_TOTAL){
+      animId = requestAnimationFrame(step);
+    } else {
+      running = false;
+      playBtn.disabled = false;
+    }
+  }
+
+  playBtn.addEventListener('click', () => {
+    if(running) return;
+    resetVisuals();
+    running = true;
+    playBtn.disabled = true;
+    startTime = null;
+    crossed1 = crossed2 = crossed3 = false;
+    t1 = t2 = t3 = null;
+    animId = requestAnimationFrame(step);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if(animId) cancelAnimationFrame(animId);
+    running = false;
+    playBtn.disabled = false;
+    resetVisuals();
+  });
+
+  resetVisuals();
+})();
+</script>
+</body>
+</html>
