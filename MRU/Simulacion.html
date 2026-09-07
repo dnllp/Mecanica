@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MRU · Velocidad con dos sensores</title>
+<style>
+  :root{
+    --bg: #0d1420;
+    --panel: #131d2b;
+    --panel-line: #223349;
+    --rail: #2a3c52;
+    --teal: #57d9c4;
+    --teal-dim: #2a5f57;
+    --amber: #f2a65a;
+    --text: #e7edf3;
+    --muted: #7c8ea3;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin: 0;
+    background: radial-gradient(circle at 20% -10%, #16233584, transparent 45%), var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 40px 20px 60px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .page{
+    width: 100%;
+    max-width: 960px;
+  }
+
+  header{
+    margin-bottom: 28px;
+  }
+
+  .eyebrow{
+    color: var(--teal);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    margin: 0 0 6px;
+  }
+
+  h1{
+    font-size: clamp(24px, 4vw, 34px);
+    margin: 0 0 10px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  p.lead{
+    color: var(--muted);
+    max-width: 62ch;
+    line-height: 1.55;
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .stage{
+    margin-top: 32px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    padding: 28px 24px 24px;
+  }
+
+  .track-wrap{
+    width: 100%;
+  }
+
+  svg{ width: 100%; height: auto; display: block; }
+
+  .rail{ stroke: var(--rail); stroke-width: 3; }
+
+  .tick{ stroke: var(--panel-line); stroke-width: 1.5; }
+
+  .sensor-post{ stroke: var(--rail); stroke-width: 3; }
+
+  .sensor-head{ fill: #1b2838; stroke: var(--rail); stroke-width: 2; }
+
+  .sensor-head.active{ fill: var(--teal-dim); stroke: var(--teal); }
+
+  .beam{
+    stroke: var(--teal);
+    stroke-width: 2;
+    stroke-dasharray: 3 4;
+    opacity: 0;
+  }
+  .beam.on{ opacity: 0.85; }
+
+  .sensor-label{
+    fill: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .distance-label{
+    fill: var(--teal);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  .cart-body{ fill: var(--amber); }
+  .cart-glow{ fill: var(--amber); opacity: 0.18; }
+
+  .flash{
+    fill: var(--teal);
+    opacity: 0;
+  }
+
+  .readout{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .stat{
+    background: #0e1826;
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+
+  .stat .label{
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .stat .value{
+    font-family: var(--mono);
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+
+  .stat.result .value{ color: var(--teal); }
+
+  .controls{
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    padding-top: 20px;
+    border-top: 1px solid var(--panel-line);
+  }
+
+  .slider-group{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .slider-group label{
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  input[type="range"]{
+    flex: 1;
+    accent-color: var(--teal);
+  }
+
+  .speed-value{
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--teal);
+    min-width: 62px;
+  }
+
+  button{
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+
+  button:active{ transform: scale(0.97); }
+
+  #playBtn{
+    background: var(--teal);
+    color: #0d1420;
+  }
+  #playBtn:disabled{ opacity: 0.5; cursor: not-allowed; }
+
+  #resetBtn{
+    background: transparent;
+    border-color: var(--panel-line);
+    color: var(--text);
+  }
+
+  .graph-section{
+    margin-top: 22px;
+  }
+
+  .graph-section h2{
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+
+  canvas{
+    width: 100%;
+    height: 160px;
+    background: #0e1826;
+    border: 1px solid var(--panel-line);
+    border-radius: 10px;
+  }
+
+  footer{
+    margin-top: 20px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 640px){
+    .readout{ grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <p class="eyebrow">Física · MRU con Arduino</p>
+    <h1>Medición de velocidad con dos sensores</h1>
+    <p class="lead">
+      El carrito recorre una distancia fija <strong>d</strong> entre el Sensor 1 y el Sensor 2.
+      Cada sensor marca el instante de paso; con esos dos tiempos se calcula
+      v = d / t, tal como lo hace el Arduino en la guía de laboratorio.
+    </p>
+  </header>
+
+  <div class="stage">
+    <div class="track-wrap">
+      <svg viewBox="0 0 900 200" preserveAspectRatio="xMidYMid meet">
+        <!-- rail -->
+        <line class="rail" x1="60" y1="150" x2="840" y2="150"></line>
+
+        <!-- distance ticks -->
+        <line class="tick" x1="220" y1="140" x2="220" y2="160"></line>
+        <line class="tick" x1="680" y1="140" x2="680" y2="160"></line>
+        <line class="tick" x1="220" y1="176" x2="220" y2="182"></line>
+        <line class="tick" x1="680" y1="176" x2="680" y2="182"></line>
+        <line class="tick" x1="220" y1="179" x2="680" y2="179" stroke-dasharray="4 4"></line>
+        <text class="distance-label" x="450" y="196" text-anchor="middle">d = 0.50 m</text>
+
+        <!-- sensor 1 -->
+        <g id="sensor1">
+          <line class="sensor-post" x1="220" y1="150" x2="220" y2="95"></line>
+          <rect class="sensor-head" x="204" y="78" width="32" height="20" rx="4"></rect>
+          <line class="beam" x1="220" y1="88" x2="220" y2="150"></line>
+          <text class="sensor-label" x="220" y="66" text-anchor="middle">SENSOR 1</text>
+        </g>
+
+        <!-- sensor 2 -->
+        <g id="sensor2">
+          <line class="sensor-post" x1="680" y1="150" x2="680" y2="95"></line>
+          <rect class="sensor-head" x="664" y="78" width="32" height="20" rx="4"></rect>
+          <line class="beam" x1="680" y1="88" x2="680" y2="150"></line>
+          <text class="sensor-label" x="680" y="66" text-anchor="middle">SENSOR 2</text>
+        </g>
+
+        <!-- start / end markers -->
+        <text class="sensor-label" x="60" y="196" text-anchor="middle">inicio</text>
+        <text class="sensor-label" x="840" y="196" text-anchor="middle">fin</text>
+
+        <!-- cart -->
+        <g id="cart" transform="translate(60,150)">
+          <circle class="cart-glow" r="16"></circle>
+          <circle class="cart-body" r="9"></circle>
+        </g>
+
+        <!-- flash overlays for detection -->
+        <circle id="flash1" class="flash" cx="220" cy="150" r="18"></circle>
+        <circle id="flash2" class="flash" cx="680" cy="150" r="18"></circle>
+      </svg>
+    </div>
+
+    <div class="readout">
+      <div class="stat">
+        <span class="label">t (Sensor 1)</span>
+        <span class="value" id="t1val">—</span>
+      </div>
+      <div class="stat">
+        <span class="label">t (Sensor 2)</span>
+        <span class="value" id="t2val">—</span>
+      </div>
+      <div class="stat result">
+        <span class="label">v = d / Δt</span>
+        <span class="value" id="vval">—</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="slider-group">
+        <label for="speed">Velocidad de lanzamiento</label>
+        <input type="range" id="speed" min="0.2" max="2.0" step="0.1" value="0.8">
+        <span class="speed-value" id="speedLabel">0.8 m/s</span>
+      </div>
+      <button id="playBtn">Lanzar objeto</button>
+      <button id="resetBtn">Reiniciar</button>
+    </div>
+
+    <div class="graph-section">
+      <h2>Posición vs. tiempo (se traza mientras el objeto avanza)</h2>
+      <canvas id="graph" width="900" height="160"></canvas>
+    </div>
+  </div>
+
+  <footer>
+    Animación de apoyo para la guía "Medición de velocidad en MRU con Arduino y dos sensores".
+    La distancia real entre sensores (0.50 m) es la misma que se usa en el código de ejemplo del Arduino;
+    cámbiala en el laboratorio físico según tu montaje.
+  </footer>
+</div>
+
+<script>
+(function(){
+  const cart = document.getElementById('cart');
+  const flash1 = document.getElementById('flash1');
+  const flash2 = document.getElementById('flash2');
+  const beam1 = document.querySelector('#sensor1 .beam');
+  const beam2 = document.querySelector('#sensor2 .beam');
+  const head1 = document.querySelector('#sensor1 .sensor-head');
+  const head2 = document.querySelector('#sensor2 .sensor-head');
+
+  const t1val = document.getElementById('t1val');
+  const t2val = document.getElementById('t2val');
+  const vval = document.getElementById('vval');
+
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const speedSlider = document.getElementById('speed');
+  const speedLabel = document.getElementById('speedLabel');
+
+  const graph = document.getElementById('graph');
+  const ctx = graph.getContext('2d');
+
+  // track geometry (SVG user units)
+  const START_X = 60;
+  const SENSOR1_X = 220;
+  const SENSOR2_X = 680;
+  const END_X = 840;
+  const REAL_DISTANCE = 0.50; // meters between sensors, matches Arduino guide
+
+  let animId = null;
+  let running = false;
+  let startTime = null;
+  let t1Time = null;
+  let t2Time = null;
+  let crossed1 = false;
+  let crossed2 = false;
+  const graphPoints = [];
+
+  function pxPerSecond(speedMs){
+    // scale so that the sensor-to-sensor distance in px maps to REAL_DISTANCE meters
+    const pxPerMeter = (SENSOR2_X - SENSOR1_X) / REAL_DISTANCE;
+    return speedMs * pxPerMeter;
+  }
+
+  function updateSpeedLabel(){
+    speedLabel.textContent = parseFloat(speedSlider.value).toFixed(1) + ' m/s';
+  }
+  speedSlider.addEventListener('input', updateSpeedLabel);
+  updateSpeedLabel();
+
+  function resetVisuals(){
+    cart.setAttribute('transform', `translate(${START_X},150)`);
+    flash1.style.opacity = 0;
+    flash2.style.opacity = 0;
+    beam1.classList.remove('on');
+    beam2.classList.remove('on');
+    head1.classList.remove('active');
+    head2.classList.remove('active');
+    t1val.textContent = '—';
+    t2val.textContent = '—';
+    vval.textContent = '—';
+    graphPoints.length = 0;
+    drawGraph();
+  }
+
+  function drawGraph(){
+    const w = graph.width, h = graph.height;
+    ctx.clearRect(0,0,w,h);
+
+    // axes
+    ctx.strokeStyle = '#223349';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, 10); ctx.lineTo(40, h-30); ctx.lineTo(w-10, h-30);
+    ctx.stroke();
+
+    ctx.fillStyle = '#7c8ea3';
+    ctx.font = '11px monospace';
+    ctx.fillText('x (m)', 6, 20);
+    ctx.fillText('t (s)', w-36, h-10);
+
+    if(graphPoints.length < 2) return;
+
+    const maxT = Math.max(1, graphPoints[graphPoints.length-1].t * 1.1);
+    const maxX = 1.1; // meters, generous headroom above sensor2 distance
+
+    ctx.strokeStyle = '#57d9c4';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    graphPoints.forEach((p, i) => {
+      const px = 40 + (p.t / maxT) * (w - 60);
+      const py = (h - 30) - (p.x / maxX) * (h - 45);
+      if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  }
+
+  function fmt(t){
+    return t.toFixed(3) + ' s';
+  }
+
+  function step(timestamp){
+    if(startTime === null) startTime = timestamp;
+    const elapsed = (timestamp - startTime) / 1000; // seconds
+    const speed = parseFloat(speedSlider.value);
+    const pxPerSec = pxPerSecond(speed);
+    const x = START_X + pxPerSec * elapsed;
+
+    cart.setAttribute('transform', `translate(${x},150)`);
+
+    // record graph point (position relative to sensor1 in meters, can be negative before it)
+    const metersFromSensor1 = (x - SENSOR1_X) / ((SENSOR2_X - SENSOR1_X) / REAL_DISTANCE);
+    graphPoints.push({ t: elapsed, x: Math.max(0, metersFromSensor1 + REAL_DISTANCE * (SENSOR1_X-START_X)/(SENSOR2_X-SENSOR1_X)) });
+    if(graphPoints.length % 2 === 0) drawGraph();
+
+    // sensor 1 crossing
+    if(!crossed1 && x >= SENSOR1_X){
+      crossed1 = true;
+      t1Time = elapsed;
+      t1val.textContent = fmt(t1Time);
+      triggerFlash(flash1, beam1, head1);
+    }
+
+    // sensor 2 crossing
+    if(!crossed2 && x >= SENSOR2_X){
+      crossed2 = true;
+      t2Time = elapsed;
+      t2val.textContent = fmt(t2Time);
+      triggerFlash(flash2, beam2, head2);
+
+      const deltaT = t2Time - t1Time;
+      const v = REAL_DISTANCE / deltaT;
+      vval.textContent = v.toFixed(3) + ' m/s';
+    }
+
+    if(x < END_X){
+      animId = requestAnimationFrame(step);
+    } else {
+      running = false;
+      playBtn.disabled = false;
+      drawGraph();
+    }
+  }
+
+  function triggerFlash(flashEl, beamEl, headEl){
+    beamEl.classList.add('on');
+    headEl.classList.add('active');
+    flashEl.style.transition = 'none';
+    flashEl.style.opacity = 0.9;
+    // force reflow then fade out
+    void flashEl.offsetWidth;
+    flashEl.style.transition = 'opacity 0.6s ease';
+    flashEl.style.opacity = 0;
+  }
+
+  playBtn.addEventListener('click', () => {
+    if(running) return;
+    resetVisuals();
+    running = true;
+    playBtn.disabled = true;
+    startTime = null;
+    crossed1 = false;
+    crossed2 = false;
+    t1Time = null;
+    t2Time = null;
+    animId = requestAnimationFrame(step);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if(animId) cancelAnimationFrame(animId);
+    running = false;
+    playBtn.disabled = false;
+    resetVisuals();
+  });
+
+  resetVisuals();
+})();
+</script>
+</body>
+</html>
